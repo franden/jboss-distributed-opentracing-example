@@ -3,9 +3,12 @@ package de.franden.opentracing.bulkorder.boundary;
 import io.opentracing.Scope;
 import io.opentracing.Span;
 import io.opentracing.Tracer;
+import io.opentracing.contrib.jaxrs2.client.ClientTracingFeature;
 import io.opentracing.propagation.Format;
+import io.opentracing.util.GlobalTracer;
 import org.eclipse.microprofile.opentracing.Traced;
 
+import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.ws.rs.GET;
 import javax.ws.rs.InternalServerErrorException;
@@ -26,12 +29,19 @@ public class BulkOrderResource {
     @Inject
     private Tracer tracer;
 
+    @PostConstruct
+    void initialize() {
+        GlobalTracer.register(tracer);
+    }
+
     @Produces(MediaType.APPLICATION_JSON)
     @Traced
     @GET
     public Response getOrder() {
 
-        Response response  = get();
+        //Response response  = getManually();
+
+        Response response = getWithFilter();
 
         String body = response.readEntity(String.class);
         if (response.getStatus() == 200) {
@@ -41,9 +51,19 @@ public class BulkOrderResource {
         }
     }
 
-    public Response get() {
+    private Response getWithFilter() {
+
+        Client client = ClientBuilder.newClient();
+        client.register(ClientTracingFeature.class);
+        return client.target("http://localhost:8080/CustomerProvider/resources/customer")
+                .request(MediaType.APPLICATION_JSON)
+                .get();
+
+    }
+
+    public Response getManually() {
         Span callCustomer = tracer.buildSpan("callCustomer").start();
-        try (Scope scope = tracer.scopeManager(). activate(callCustomer, false)) {
+        try (Scope scope = tracer.scopeManager().activate(callCustomer, false)) {
 
             MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
             HeaderCarrier headerCarrier = new HeaderCarrier(headers);
